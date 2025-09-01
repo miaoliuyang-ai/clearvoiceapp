@@ -1,3 +1,5 @@
 fastapi
 uvicorn
 pydantic
+yamlargparse
+rotary_embedding_torch

@@ -27,7 +27,7 @@ import torch
 import torch_npu
 from datetime import datetime
 from scipy.io import wavfile
-from fastapi import FastAPI, Request, Query, Response
+from fastapi import FastAPI, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from utilities.logging_manager import setup_api_logging
 
@@ -277,15 +277,16 @@ async def process_audio(
     request: Request,
     session_id: str = Query(None, description="会话ID，如果不提供将自动生成")
 ):
-    """处理音频数据，使用 ClearVoice 进行降噪处理
-
-    返回二进制音频数据
-    """
+    """处理音频数据，使用 ClearVoice 进行降噪处理"""
     # 获取原始二进制数据
     audio_data = await request.body()
 
     if not audio_data:
-        return Response(content=b"", media_type="application/octet-stream")
+        return {
+            "audio_data": b"",
+            "denoised": False,
+            "session_id": session_id
+        }
 
     # 如果没有提供session_id，自动生成一个
     if not session_id:
@@ -301,7 +302,11 @@ async def process_audio(
         audio_array = _preprocess_audio_data(audio_data, session_id)
         if audio_array is None:
             logger.error(f"[{session_id}] 音频预处理失败")
-            return Response(content=audio_data, media_type="application/octet-stream")  # 返回原始数据
+            return {
+                "audio_data": audio_data,  # 返回原始数据
+                "denoised": False,
+                "session_id": session_id
+            }
 
         # 保存原始音频数据用于调试
         save_audio_debug_data(audio_data, audio_array, session_id, "original", timestamp)
@@ -324,12 +329,20 @@ async def process_audio(
 
             logger.info(f"[{session_id}] 音频处理完成，原始大小: {len(audio_data)} 字节，处理后大小: {len(processed_audio_bytes)} 字节")
 
-            return Response(content=processed_audio_bytes, media_type="application/octet-stream")
+            return {
+                "audio_data": processed_audio_bytes,
+                "denoised": clearvoice_instance is not None,
+                "session_id": session_id
+            }
         else:
             logger.warning(f"[{session_id}] 降噪处理失败，返回原始音频数据")
             # 保存处理失败的音频数据用于调试
             save_audio_debug_data(audio_data, audio_array, session_id, "failed", timestamp)
-            return Response(content=audio_data, media_type="application/octet-stream")
+            return {
+                "audio_data": audio_data,
+                "denoised": False,
+                "session_id": session_id
+            }
 
     except Exception as e:
         logger.error(f"[{session_id}] 音频处理异常: {e}")
@@ -338,4 +351,8 @@ async def process_audio(
             save_audio_debug_data(audio_data, None, session_id, "error", timestamp)
         except Exception as save_error:
             logger.error(f"[{session_id}] 保存异常音频数据失败: {save_error}")
-        return Response(content=audio_data, media_type="application/octet-stream")  # 返回原始数据
+        return {
+            "audio_data": audio_data,  # 返回原始数据
+            "denoised": False,
+            "session_id": session_id
+        }

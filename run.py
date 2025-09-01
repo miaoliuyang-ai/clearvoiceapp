@@ -18,7 +18,7 @@ def main():
         "app.main:app",
         host="127.0.0.1",  # 本地开发使用localhost
         port=8000,
-        reload=True,
+        reload=False,  # 禁用自动重载
         log_level="info",
         access_log=True
     )
